@@ -1,0 +1,371 @@
+-- reignfall.lua
+-- features: infinite ammo | infinite stamina (hybrid) | mission item esp | +15% speed
+-- usage: execute once to enable, execute again to disable and clean up
+-- runtime switches: _G.reignfall.ammo/.stamina/.esp/.speed/.distance/.spin/.spin_speed/.size
+
+if _G.__reignfall_alive and _G.__reignfall_heartbeat and tick() - _G.__reignfall_heartbeat < 2 then
+	_G.enabled = false
+	return
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ws = game.Workspace
+local lp = Players.LocalPlayer
+
+local SEGMENTS = 100
+local MAX_TRACK = 16
+local STAMINA_FORCED_MAX = 9999
+local STAMINA_FALLBACK = 100
+local SPEED_MULT = 1.15
+local STUD2M = 1 / 3.5714285714
+local WHITE = Color3.fromHex("#ffffff")
+
+_G.reignfall = {
+	ammo = true,
+	stamina = true,
+	esp = true,
+	speed = true,
+	distance = true,
+	spin = false,
+	spin_speed = 1,
+	size = 1,
+}
+_G.enabled = true
+_G.__reignfall_alive = true
+_G.__reignfall_heartbeat = tick()
+
+local SPECIAL_NAMES = {
+	fuse = "fuse",
+	bolt_cutters = "bolt cutters",
+	c4 = "c4",
+	keycard_perla = "keycard",
+}
+
+local function displayName(typeName)
+	return SPECIAL_NAMES[typeName] or "item"
+end
+
+local function newline(color)
+	local d = Drawing.new("Line")
+	d.Color = color
+	d.Transparency = 0.1
+	d.Visible = false
+	d.From = Vector2.new(0, 0)
+	d.To = Vector2.new(0, 0)
+	d.Thickness = 2
+	return d
+end
+
+local function newtext(color)
+	local d = Drawing.new("Text")
+	d.Text = ""
+	d.Color = color
+	d.Center = true
+	d.Outline = true
+	d.Size = 13
+	d.Font = Drawing.Fonts.ProximaSoftBold
+	d.Visible = false
+	return d
+end
+
+local function removeDrawing(d)
+	if d then pcall(function() d.Visible = false d:Remove() end) end
+end
+
+local records = {}
+local byAddr = {}
+
+local function makeDrawings(rec)
+	if rec.ringEnabled and not rec.ring then
+		rec.ring = {}
+		for i = 1, SEGMENTS do rec.ring[i] = newline(WHITE) end
+	end
+	if not rec.label then
+		rec.label = newtext(WHITE)
+		rec.distText = newtext(WHITE)
+	end
+end
+
+local function hideRec(rec)
+	if rec.hidden then return end
+	rec.hidden = true
+	if rec.ring then
+		for i = 1, SEGMENTS do
+			local l = rec.ring[i]
+			if l.Visible then l.Visible = false end
+		end
+	end
+	if rec.label and rec.label.Visible then rec.label.Visible = false end
+	if rec.distText and rec.distText.Visible then rec.distText.Visible = false end
+end
+
+local function removeRec(rec)
+	if rec.ring then
+		for i = 1, SEGMENTS do removeDrawing(rec.ring[i]) end
+	end
+	removeDrawing(rec.label)
+	removeDrawing(rec.distText)
+	rec.ring = nil
+	rec.label = nil
+	rec.distText = nil
+end
+
+local function getItemInfo(c)
+	local oc = c:FindFirstChild("ObjectConfig")
+	local tval = oc and oc:FindFirstChild("mission_item")
+	local isItem = c.Name:lower():find("mission_item", 1, true) ~= nil
+		or (tval ~= nil and tval.ClassName == "StringValue")
+	if not isItem then return nil end
+	local part = nil
+	for _, ch in ipairs(c:GetChildren()) do
+		local cl = ch.ClassName
+		if cl == "Part" or cl == "MeshPart" or cl == "UnionOperation" then part = ch break end
+	end
+	if not part then
+		local ok, pp = pcall(function() return c.PrimaryPart end)
+		if ok and pp then part = pp end
+	end
+	if not part then return nil end
+	local typeName = c.Name
+	if tval and tval.ClassName == "StringValue" and tval.Value ~= "" then typeName = tval.Value end
+	local ok, addr = pcall(function() return c.Address end)
+	if not ok or type(addr) ~= "number" then return nil end
+	return part, typeName, addr
+end
+
+task.spawn(function()
+	while _G.enabled do
+		local go = ws:FindFirstChild("Game")
+		local cur = go and go:FindFirstChild("Current")
+		local spawned = cur and cur:FindFirstChild("Spawned")
+		local gos = spawned and spawned:FindFirstChild("GameObjects")
+		local seen = {}
+		if gos then
+			for _, c in ipairs(gos:GetChildren()) do
+				local part, typeName, addr = getItemInfo(c)
+				if part and not seen[addr] and (byAddr[addr] or #records < MAX_TRACK) then
+					seen[addr] = true
+					local rec = byAddr[addr]
+					local size = part.Size
+					if not rec then
+						rec = { addr = addr, part = part, hidden = true }
+						byAddr[addr] = rec
+						records[#records + 1] = rec
+					else
+						rec.part = part
+					end
+					rec.name = displayName(typeName)
+					rec.ringEnabled = SPECIAL_NAMES[typeName] ~= nil
+					local radius = math.max(size.X, size.Z) * 0.75 + 0.6
+					rec.radius = radius < 1.3 and 1.3 or radius
+					rec.yoffset = size.Y * 0.5
+				end
+			end
+		end
+		for i = #records, 1, -1 do
+			local rec = records[i]
+			if rec and not seen[rec.addr] then
+				removeRec(rec)
+				byAddr[rec.addr] = nil
+				records[i] = records[#records]
+				records[#records] = nil
+			end
+		end
+		task.wait(0.35)
+	end
+end)
+
+local unit = table.create(SEGMENTS + 1)
+for n = 0, SEGMENTS do
+	local a = math.pi * 2 * n / SEGMENTS
+	unit[n + 1] = Vector2.new(math.cos(a), math.sin(a))
+end
+
+local conn
+conn = RunService.RenderStepped:Connect(function()
+	if not _G.enabled then return end
+	local cfg = _G.reignfall
+	if not cfg.esp then
+		for i = 1, #records do
+			local rec = records[i]
+			if rec then hideRec(rec) end
+		end
+		return
+	end
+	local cam = ws.CurrentCamera
+	if not cam then
+		for i = 1, #records do
+			local rec = records[i]
+			if rec then hideRec(rec) end
+		end
+		return
+	end
+	local camPos = cam.Position
+	local sizeMult = cfg.size or 1
+	local angle = cfg.spin == true and (tick() * (cfg.spin_speed or 1)) or 0
+	local cosa, sina = math.cos(angle), math.sin(angle)
+	for i = 1, #records do
+		local rec = records[i]
+		if not rec then
+			-- skip
+		elseif not rec.part or not rec.part.Parent then
+			hideRec(rec)
+		else
+			local part = rec.part
+			local world = part.Position
+			local dx, dy, dz = world.X - camPos.X, world.Y - camPos.Y, world.Z - camPos.Z
+			local meters = math.sqrt(dx * dx + dy * dy + dz * dz) * STUD2M
+			makeDrawings(rec)
+			rec.hidden = false
+			if rec.ring then
+				local y = world.Y - rec.yoffset
+				local radius = rec.radius * sizeMult
+				local ring = rec.ring
+				local u0 = unit[1]
+				local px, pz = u0.X * cosa - u0.Y * sina, u0.X * sina + u0.Y * cosa
+				local prev, prevOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
+				for s = 1, SEGMENTS do
+					local u = unit[s + 1]
+					px, pz = u.X * cosa - u.Y * sina, u.X * sina + u.Y * cosa
+					local cur, curOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
+					local line = ring[s]
+					if line then
+						if prevOn and curOn then
+							line.From = prev
+							line.To = cur
+							if not line.Visible then line.Visible = true end
+						elseif line.Visible then
+							line.Visible = false
+						end
+					end
+					prev, prevOn = cur, curOn
+				end
+			end
+			local screen, on = WorldToScreen(world)
+			if on then
+				rec.label.Text = rec.name
+				rec.label.Position = Vector2.new(screen.X, screen.Y - 30)
+				rec.label.Visible = true
+				if cfg.distance ~= false then
+					rec.distText.Text = math.floor(meters + 0.5) .. "m"
+					rec.distText.Position = Vector2.new(screen.X, screen.Y - 16)
+					rec.distText.Visible = true
+				elseif rec.distText.Visible then
+					rec.distText.Visible = false
+				end
+			else
+				if rec.label.Visible then rec.label.Visible = false end
+				if rec.distText.Visible then rec.distText.Visible = false end
+			end
+		end
+	end
+end)
+
+local staminaConn
+staminaConn = RunService.Heartbeat:Connect(function()
+	if not _G.enabled or not _G.reignfall.stamina then return end
+	local char = lp.Character
+	local hum = char and char:FindFirstChild("Humanoid")
+	local vals = hum and hum:FindFirstChild("Values")
+	local st = vals and vals:FindFirstChild("Stamina")
+	if st then
+		local mx = st:FindFirstChild("Max")
+		local target = (mx and mx.Value > 0) and mx.Value or STAMINA_FALLBACK
+		if st.Value < target then
+			pcall(function() st.Value = target end)
+		end
+	end
+end)
+
+local staminaNudge = 0
+local walkBoosted = nil
+
+task.spawn(function()
+	while _G.enabled do
+		local cfg = _G.reignfall
+		if cfg.ammo then
+			local char = lp.Character
+			local t = char and (char:FindFirstChild("primary") or char:FindFirstChild("secondary"))
+			local e = t and t:FindFirstChild("WeaponData") and t.WeaponData:FindFirstChild("Essentials")
+			if e then
+				local n = e:FindFirstChild("MaxAmmo")
+				local a = e:FindFirstChild("Ammo")
+				local r = e:FindFirstChild("ReplicatedAmmo")
+				if n and a and a.Value ~= n.Value then a.Value = n.Value end
+				if n and r and r.Value ~= n.Value then r.Value = n.Value end
+			end
+		end
+		if cfg.stamina then
+			local char = lp.Character
+			if char then
+				local hum = char:FindFirstChild("Humanoid")
+				local vals = hum and hum:FindFirstChild("Values")
+				local st = vals and vals:FindFirstChild("Stamina")
+				if st then
+					local mx = st:FindFirstChild("Max")
+					if mx and mx.Value ~= STAMINA_FORCED_MAX then
+						pcall(function() mx.Value = STAMINA_FORCED_MAX end)
+					end
+					staminaNudge = staminaNudge + 1
+					if staminaNudge >= 20 then
+						staminaNudge = 0
+						local mxv = mx and mx.Value or STAMINA_FALLBACK
+						if st.Value == mxv then
+							pcall(function() st.Value = mxv - 0.5 end)
+						end
+					end
+				end
+				local cs = char:FindFirstChild("CharacterStats")
+				local u = cs and cs:FindFirstChild("unlimited_stamina")
+				if u then
+					pcall(function()
+						if u.Value ~= true then u.Value = true end
+						local d = u:FindFirstChild("Default")
+						if d and d.Value ~= true then d.Value = true end
+					end)
+				end
+				local cost = cs and cs:FindFirstChild("stamina_cost")
+				if cost then
+					pcall(function()
+						if cost.Value ~= 0 then cost.Value = 0 end
+					end)
+				end
+			end
+		end
+		if cfg.speed then
+			local char = lp.Character
+			if char then
+				local hum = char:FindFirstChild("Humanoid")
+				local vals = hum and hum:FindFirstChild("Values")
+				local misc = vals and vals:FindFirstChild("MiscValues")
+				local dw = misc and misc:FindFirstChild("DefaultWalkSpeed")
+				if dw then
+					local v = dw.Value
+					if v ~= walkBoosted then
+						walkBoosted = v * SPEED_MULT
+						pcall(function() dw.Value = walkBoosted end)
+					end
+				end
+			end
+		end
+		_G.__reignfall_heartbeat = tick()
+		task.wait(0.1)
+	end
+end)
+
+task.spawn(function()
+	while _G.enabled do task.wait(0.1) end
+	if conn then pcall(function() conn:Disconnect() end) end
+	if staminaConn then pcall(function() staminaConn:Disconnect() end) end
+	for i = 1, #records do
+		local rec = records[i]
+		if rec then removeRec(rec) end
+	end
+	for i = #records, 1, -1 do records[i] = nil end
+	for k in pairs(byAddr) do byAddr[k] = nil end
+	_G.__reignfall_alive = false
+	pcall(function() notify("reignfall.lua", "disabled", 3) end)
+end)
+
+pcall(function() notify("reignfall.lua", "enabled: ammo + stamina + item esp", 3) end)
