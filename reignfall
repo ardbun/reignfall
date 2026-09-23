@@ -1,5 +1,5 @@
 -- reignfall.lua
--- features: infinite ammo | infinite stamina (hybrid) | mission item esp | +15% speed
+-- features: infinite ammo | infinite stamina (hybrid) | mission item esp | +17% speed
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.speed/.distance/.spin/.spin_speed/.size
 
@@ -17,7 +17,7 @@ local SEGMENTS = 100
 local MAX_TRACK = 16
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
-local SPEED_MULT = 1.15
+local SPEED_MULT = 1.17
 local STUD2M = 1 / 3.5714285714
 local WHITE = Color3.fromHex("#ffffff")
 
