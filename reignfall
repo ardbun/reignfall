@@ -262,23 +262,61 @@ conn = RunService.RenderStepped:Connect(function()
 	end
 end)
 
+local function findDescendant(parent, name)
+	if not parent then return nil end
+	for _, object in ipairs(parent:GetDescendants()) do
+		if object.Name == name then
+			return object
+		end
+	end
+	return nil
+end
+
+local staminaCharacterAddress
+local cachedStamina
+local cachedStats
+
+local function getStaminaState(char)
+	if not char then return nil, nil end
+	local ok, address = pcall(function() return char.Address end)
+	if ok and type(address) == "number" and address == staminaCharacterAddress then
+		return cachedStamina, cachedStats
+	end
+	local hum = char and char:FindFirstChild("Humanoid")
+	local vals = hum and hum:FindFirstChild("Values")
+	local stamina = vals and vals:FindFirstChild("Stamina")
+	if not stamina then
+		stamina = findDescendant(char, "Stamina")
+	end
+	local stats = char and char:FindFirstChild("CharacterStats")
+	if not stats then
+		stats = findDescendant(char, "CharacterStats")
+	end
+	if ok and type(address) == "number" then
+		staminaCharacterAddress = address
+		cachedStamina = stamina
+		cachedStats = stats
+	end
+	return stamina, stats
+end
+
 local staminaConn
 staminaConn = RunService.Heartbeat:Connect(function()
 	if not _G.enabled or not _G.reignfall.stamina then return end
-	local char = lp.Character
-	local hum = char and char:FindFirstChild("Humanoid")
-	local vals = hum and hum:FindFirstChild("Values")
-	local st = vals and vals:FindFirstChild("Stamina")
-	if st then
-		local mx = st:FindFirstChild("Max")
-		local target = (mx and mx.Value > 0) and mx.Value or STAMINA_FALLBACK
-		if st.Value < target then
-			pcall(function() st.Value = target end)
-		end
+	local stamina = getStaminaState(lp.Character)
+	if stamina then
+		local maxValue = stamina:FindFirstChild("Max")
+		pcall(function()
+			if maxValue and maxValue.Value ~= STAMINA_FORCED_MAX then
+				maxValue.Value = STAMINA_FORCED_MAX
+			end
+			if stamina.Value < STAMINA_FORCED_MAX then
+				stamina.Value = STAMINA_FORCED_MAX
+			end
+		end)
 	end
 end)
 
-local staminaNudge = 0
 local walkBoosted = nil
 
 task.spawn(function()
@@ -299,25 +337,20 @@ task.spawn(function()
 		if cfg.stamina then
 			local char = lp.Character
 			if char then
-				local hum = char:FindFirstChild("Humanoid")
-				local vals = hum and hum:FindFirstChild("Values")
-				local st = vals and vals:FindFirstChild("Stamina")
+				local st, cs = getStaminaState(char)
 				if st then
 					local mx = st:FindFirstChild("Max")
-					if mx and mx.Value ~= STAMINA_FORCED_MAX then
-						pcall(function() mx.Value = STAMINA_FORCED_MAX end)
-					end
-					staminaNudge = staminaNudge + 1
-					if staminaNudge >= 20 then
-						staminaNudge = 0
-						local mxv = mx and mx.Value or STAMINA_FALLBACK
-						if st.Value == mxv then
-							pcall(function() st.Value = mxv - 0.5 end)
+					pcall(function()
+						if mx and mx.Value ~= STAMINA_FORCED_MAX then
+							mx.Value = STAMINA_FORCED_MAX
 						end
-					end
+						if st.Value < STAMINA_FORCED_MAX then
+							st.Value = STAMINA_FORCED_MAX
+						end
+					end)
 				end
-				local cs = char:FindFirstChild("CharacterStats")
-				local u = cs and cs:FindFirstChild("unlimited_stamina")
+				local u = cs and (cs:FindFirstChild("unlimited_stamina")
+					or findDescendant(cs, "unlimited_stamina"))
 				if u then
 					pcall(function()
 						if u.Value ~= true then u.Value = true end
@@ -325,7 +358,8 @@ task.spawn(function()
 						if d and d.Value ~= true then d.Value = true end
 					end)
 				end
-				local cost = cs and cs:FindFirstChild("stamina_cost")
+				local cost = cs and (cs:FindFirstChild("stamina_cost")
+					or findDescendant(cs, "stamina_cost"))
 				if cost then
 					pcall(function()
 						if cost.Value ~= 0 then cost.Value = 0 end
