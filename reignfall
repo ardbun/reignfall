@@ -13,7 +13,7 @@ local RunService = game:GetService("RunService")
 local ws = game.Workspace
 local lp = Players.LocalPlayer
 
-local SEGMENTS = 100
+local SEGMENTS = 48
 local MAX_TRACK = 16
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
@@ -148,6 +148,10 @@ task.spawn(function()
 					seen[addr] = true
 					local rec = byAddr[addr]
 					local size = part.Size
+					if not size or type(size.X) ~= "number"
+						or type(size.Y) ~= "number" or type(size.Z) ~= "number" then
+						continue
+					end
 					if not rec then
 						rec = { addr = addr, part = part, hidden = true }
 						byAddr[addr] = rec
