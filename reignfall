@@ -281,16 +281,8 @@ local function findDescendant(parent, name)
 	return nil
 end
 
-local staminaCharacterAddress
-local cachedStamina
-local cachedStats
-
 local function getStaminaState(char)
 	if not char then return nil, nil end
-	local ok, address = pcall(function() return char.Address end)
-	if ok and type(address) == "number" and address == staminaCharacterAddress then
-		return cachedStamina, cachedStats
-	end
 	local hum = char and char:FindFirstChild("Humanoid")
 	local vals = hum and hum:FindFirstChild("Values")
 	local stamina = vals and vals:FindFirstChild("Stamina")
@@ -300,11 +292,6 @@ local function getStaminaState(char)
 	local stats = char and char:FindFirstChild("CharacterStats")
 	if not stats then
 		stats = findDescendant(char, "CharacterStats")
-	end
-	if ok and type(address) == "number" then
-		staminaCharacterAddress = address
-		cachedStamina = stamina
-		cachedStats = stats
 	end
 	return stamina, stats
 end
@@ -316,12 +303,8 @@ staminaConn = RunService.Heartbeat:Connect(function()
 	if stamina then
 		local maxValue = stamina:FindFirstChild("Max")
 		pcall(function()
-			if maxValue and maxValue.Value ~= STAMINA_FORCED_MAX then
-				maxValue.Value = STAMINA_FORCED_MAX
-			end
-			if stamina.Value < STAMINA_FORCED_MAX then
-				stamina.Value = STAMINA_FORCED_MAX
-			end
+			if maxValue then maxValue.Value = STAMINA_FORCED_MAX end
+			stamina.Value = STAMINA_FORCED_MAX
 		end)
 	end
 end)
@@ -350,12 +333,8 @@ task.spawn(function()
 				if st then
 					local mx = st:FindFirstChild("Max")
 					pcall(function()
-						if mx and mx.Value ~= STAMINA_FORCED_MAX then
-							mx.Value = STAMINA_FORCED_MAX
-						end
-						if st.Value < STAMINA_FORCED_MAX then
-							st.Value = STAMINA_FORCED_MAX
-						end
+						if mx then mx.Value = STAMINA_FORCED_MAX end
+						st.Value = STAMINA_FORCED_MAX
 					end)
 				end
 				local u = cs and (cs:FindFirstChild("unlimited_stamina")
