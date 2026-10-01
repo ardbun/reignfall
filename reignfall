@@ -42,6 +42,10 @@ local SPECIAL_NAMES = {
 	keycard_perla = "keycard",
 }
 
+local EXCLUDED_OBJECTS = {
+	objective_collectible_soe_safe = true,
+}
+
 local function displayName(typeName)
 	return SPECIAL_NAMES[typeName] or "item"
 end
@@ -112,6 +116,7 @@ local function removeRec(rec)
 end
 
 local function getItemInfo(c)
+	if EXCLUDED_OBJECTS[c.Name] then return nil end
 	local oc = c:FindFirstChild("ObjectConfig")
 	local tval = oc and oc:FindFirstChild("mission_item")
 	local isItem = c.Name:lower():find("mission_item", 1, true) ~= nil
