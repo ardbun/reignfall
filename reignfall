@@ -3,7 +3,7 @@
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.speed/.distance/.spin/.spin_speed/.size
 
-local SCRIPT_VERSION = 3
+local SCRIPT_VERSION = 7
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
 	and tick() - _G.__reignfall_heartbeat < 2
 	and _G.__reignfall_version == SCRIPT_VERSION then
@@ -44,7 +44,7 @@ local SPECIAL_NAMES = {
 	fuse = "fuse",
 	bolt_cutters = "bolt cutters",
 	c4 = "c4",
-	["weak spot"] = "weak spot",
+	["marked spot"] = "mark",
 	keycard_perla = "keycard",
 }
 
@@ -145,11 +145,16 @@ local function getItemInfo(c)
 	return part, typeName, addr
 end
 
-local function getWeakSpotInfo(c)
+local function getMarkedSpotInfo(c)
 	if c.Name ~= "objective_c4" then return nil end
+	local config = c:FindFirstChild("ObjectConfig")
+	local planted = config and config:FindFirstChild("planted")
+	if planted and planted.Value == true then return nil end
+	local part = c:FindFirstChild("insert_c4")
+	if not part then return nil end
 	local ok, addr = pcall(function() return c.Address end)
 	if not ok or type(addr) ~= "number" then return nil end
-	return c, "weak spot", addr
+	return part, "marked spot", addr
 end
 
 task.spawn(function()
@@ -158,10 +163,6 @@ task.spawn(function()
 		local cur = go and go:FindFirstChild("Current")
 		local spawned = cur and cur:FindFirstChild("Spawned")
 		local gos = spawned and spawned:FindFirstChild("GameObjects")
-		local scene = cur and cur:FindFirstChild("Scene")
-		local map = scene and scene:FindFirstChild("Map")
-		local refs = map and map:FindFirstChild("GameObjectRefs")
-		local objectives = refs and refs:FindFirstChild("objective")
 		local seen = {}
 		local function track(part, typeName, addr)
 			if not part or seen[addr] or (byAddr[addr] == nil and #records >= MAX_TRACK) then return end
@@ -180,7 +181,11 @@ task.spawn(function()
 				rec.part = part
 			end
 			rec.name = displayName(typeName)
-			rec.ringEnabled = SPECIAL_NAMES[typeName] ~= nil
+			rec.ringEnabled = SPECIAL_NAMES[typeName] ~= nil and typeName ~= "marked spot"
+			if not rec.ringEnabled and rec.ring then
+				for i = 1, SEGMENTS do removeDrawing(rec.ring[i]) end
+				rec.ring = nil
+			end
 			local radius = math.max(size.X, size.Z) * 0.75 + 0.6
 			rec.radius = radius < 1.3 and 1.3 or radius
 			rec.yoffset = size.Y * 0.5
@@ -188,12 +193,9 @@ task.spawn(function()
 		if gos then
 			for _, c in ipairs(gos:GetChildren()) do
 				local part, typeName, addr = getItemInfo(c)
-				track(part, typeName, addr)
-			end
-		end
-		if objectives then
-			for _, c in ipairs(objectives:GetChildren()) do
-				local part, typeName, addr = getWeakSpotInfo(c)
+				if not part then
+					part, typeName, addr = getMarkedSpotInfo(c)
+				end
 				track(part, typeName, addr)
 			end
 		end
