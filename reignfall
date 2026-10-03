@@ -44,7 +44,7 @@ local SPECIAL_NAMES = {
 	fuse = "fuse",
 	bolt_cutters = "bolt cutters",
 	c4 = "c4",
-	["marked spot"] = "mark",
+	["marked spot"] = "marked spot",
 	keycard_perla = "keycard",
 }
 
@@ -52,8 +52,21 @@ local EXCLUDED_OBJECTS = {
 	objective_collectible_soe_safe = true,
 }
 
+local function canonicalTypeName(typeName)
+	if type(typeName) ~= "string" then return "" end
+	local normalized = typeName:lower():gsub("_", " "):gsub("%s+", " ")
+	normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+	if normalized == "c4" or normalized == "c-4" or normalized == "c 4" then
+		return "c4"
+	end
+	if normalized == "bolt cutter" or normalized == "bolt cutters" then
+		return "bolt_cutters"
+	end
+	return normalized
+end
+
 local function displayName(typeName)
-	return SPECIAL_NAMES[typeName] or "item"
+	return SPECIAL_NAMES[canonicalTypeName(typeName)] or "item"
 end
 
 local function newline(color)
@@ -140,6 +153,7 @@ local function getItemInfo(c)
 	if not part then return nil end
 	local typeName = c.Name
 	if tval and tval.ClassName == "StringValue" and tval.Value ~= "" then typeName = tval.Value end
+	typeName = canonicalTypeName(typeName)
 	local ok, addr = pcall(function() return c.Address end)
 	if not ok or type(addr) ~= "number" then return nil end
 	return part, typeName, addr
