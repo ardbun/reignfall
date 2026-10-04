@@ -3,7 +3,7 @@
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.speed/.distance/.spin/.spin_speed/.size
 
-local SCRIPT_VERSION = 7
+local SCRIPT_VERSION = 10
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
 	and tick() - _G.__reignfall_heartbeat < 2
 	and _G.__reignfall_version == SCRIPT_VERSION then
@@ -17,8 +17,8 @@ local RunService = game:GetService("RunService")
 local ws = game.Workspace
 local lp = Players.LocalPlayer
 
-local SEGMENTS = 48
-local MAX_TRACK = 16
+local SEGMENTS = 16
+local MAX_TRACK = 10
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
 local SPEED_MULT = 1.17
@@ -195,7 +195,7 @@ task.spawn(function()
 				rec.part = part
 			end
 			rec.name = displayName(typeName)
-			rec.ringEnabled = SPECIAL_NAMES[typeName] ~= nil and typeName ~= "marked spot"
+			rec.ringEnabled = false
 			if not rec.ringEnabled and rec.ring then
 				for i = 1, SEGMENTS do removeDrawing(rec.ring[i]) end
 				rec.ring = nil
@@ -252,6 +252,7 @@ conn = RunService.RenderStepped:Connect(function()
 		return
 	end
 	local camPos = cam.Position
+	if not camPos then return end
 	local sizeMult = cfg.size or 1
 	local angle = cfg.spin == true and (tick() * (cfg.spin_speed or 1)) or 0
 	local cosa, sina = math.cos(angle), math.sin(angle)
@@ -263,57 +264,57 @@ conn = RunService.RenderStepped:Connect(function()
 			hideRec(rec)
 		else
 			local part = rec.part
-			local world = part.Position
+					local world = part.Position
 			if not world or type(world.X) ~= "number"
 				or type(world.Y) ~= "number" or type(world.Z) ~= "number"
 				or not camPos or type(camPos.X) ~= "number"
 				or type(camPos.Y) ~= "number" or type(camPos.Z) ~= "number" then
 				hideRec(rec)
-				continue
-			end
-			local dx, dy, dz = world.X - camPos.X, world.Y - camPos.Y, world.Z - camPos.Z
-			local meters = math.sqrt(dx * dx + dy * dy + dz * dz) * STUD2M
-			makeDrawings(rec)
-			rec.hidden = false
-			if rec.ring then
-				local y = world.Y - rec.yoffset
-				local radius = rec.radius * sizeMult
-				local ring = rec.ring
-				local u0 = unit[1]
-				local px, pz = u0.X * cosa - u0.Y * sina, u0.X * sina + u0.Y * cosa
-				local prev, prevOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
-				for s = 1, SEGMENTS do
-					local u = unit[s + 1]
-					px, pz = u.X * cosa - u.Y * sina, u.X * sina + u.Y * cosa
-					local cur, curOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
-					local line = ring[s]
-					if line then
-						if prevOn and curOn then
-							line.From = prev
-							line.To = cur
-							if not line.Visible then line.Visible = true end
-						elseif line.Visible then
-							line.Visible = false
+			else
+				local dx, dy, dz = world.X - camPos.X, world.Y - camPos.Y, world.Z - camPos.Z
+				local meters = math.sqrt(dx * dx + dy * dy + dz * dz) * STUD2M
+				makeDrawings(rec)
+				rec.hidden = false
+				if rec.ring then
+					local y = world.Y - rec.yoffset
+					local radius = rec.radius * sizeMult
+					local ring = rec.ring
+					local u0 = unit[1]
+					local px, pz = u0.X * cosa - u0.Y * sina, u0.X * sina + u0.Y * cosa
+					local prev, prevOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
+					for s = 1, SEGMENTS do
+						local u = unit[s + 1]
+						px, pz = u.X * cosa - u.Y * sina, u.X * sina + u.Y * cosa
+						local cur, curOn = WorldToScreen(Vector3.new(world.X + px * radius, y, world.Z + pz * radius))
+						local line = ring[s]
+						if line then
+							if prevOn and curOn then
+								line.From = prev
+								line.To = cur
+								line.Visible = true
+							else
+								line.Visible = false
+							end
 						end
+						prev, prevOn = cur, curOn
 					end
-					prev, prevOn = cur, curOn
 				end
-			end
-			local screen, on = WorldToScreen(world)
-			if on then
-				rec.label.Text = rec.name
-				rec.label.Position = Vector2.new(screen.X, screen.Y - 30)
-				rec.label.Visible = true
-				if cfg.distance ~= false then
-					rec.distText.Text = math.floor(meters + 0.5) .. "m"
-					rec.distText.Position = Vector2.new(screen.X, screen.Y - 16)
-					rec.distText.Visible = true
-				elseif rec.distText.Visible then
+				local screen, on = WorldToScreen(world)
+				if on then
+					rec.label.Text = rec.name
+					rec.label.Position = Vector2.new(screen.X, screen.Y - 30)
+					rec.label.Visible = true
+					if cfg.distance ~= false then
+						rec.distText.Text = math.floor(meters + 0.5) .. "m"
+						rec.distText.Position = Vector2.new(screen.X, screen.Y - 16)
+						rec.distText.Visible = true
+					else
+						rec.distText.Visible = false
+					end
+				else
+					rec.label.Visible = false
 					rec.distText.Visible = false
 				end
-			else
-				if rec.label.Visible then rec.label.Visible = false end
-				if rec.distText.Visible then rec.distText.Visible = false end
 			end
 		end
 	end
@@ -329,16 +330,8 @@ local function findDescendant(parent, name)
 	return nil
 end
 
-local staminaCharacterAddress
-local cachedStamina
-local cachedStats
-
 local function getStaminaState(char)
 	if not char then return nil, nil end
-	local ok, address = pcall(function() return char.Address end)
-	if ok and type(address) == "number" and address == staminaCharacterAddress then
-		return cachedStamina, cachedStats
-	end
 	local hum = char and char:FindFirstChild("Humanoid")
 	local vals = hum and hum:FindFirstChild("Values")
 	local stamina = vals and vals:FindFirstChild("Stamina")
@@ -348,11 +341,6 @@ local function getStaminaState(char)
 	local stats = char and char:FindFirstChild("CharacterStats")
 	if not stats then
 		stats = findDescendant(char, "CharacterStats")
-	end
-	if ok and type(address) == "number" then
-		staminaCharacterAddress = address
-		cachedStamina = stamina
-		cachedStats = stats
 	end
 	return stamina, stats
 end
