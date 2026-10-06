@@ -3,7 +3,7 @@
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.distance/.spin/.spin_speed/.size
 
-local SCRIPT_VERSION = 11
+local SCRIPT_VERSION = 12
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
 	and tick() - _G.__reignfall_heartbeat < 2
 	and _G.__reignfall_version == SCRIPT_VERSION then
@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 local ws = game.Workspace
 local lp = Players.LocalPlayer
 
-local SEGMENTS = 16
+local SEGMENTS = 64
 local MAX_TRACK = 10
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
@@ -74,6 +74,44 @@ local function displayName(typeName)
 	local special = SPECIAL_NAMES[canonical]
 	if special then return special end
 	return canonical ~= "" and canonical or "unknown"
+end
+
+local function readStringValue(parent, names)
+	if not parent then return "" end
+	for _, name in ipairs(names) do
+		local value = parent:FindFirstChild(name)
+		if value and value.ClassName == "StringValue" and type(value.Value) == "string"
+			and value.Value ~= "" then
+			return value.Value
+		end
+	end
+	return ""
+end
+
+local function inferItemName(c, oc)
+	local value = readStringValue(oc, {
+		"mission_item",
+		"item_name",
+		"item_type",
+		"display_name",
+		"name",
+		"type",
+	})
+	if value ~= "" then return value end
+	for _, attributeName in ipairs({
+		"mission_item",
+		"item_name",
+		"item_type",
+		"display_name",
+		"name",
+		"type",
+	}) do
+		local ok, attribute = pcall(function() return c:GetAttribute(attributeName) end)
+		if ok and type(attribute) == "string" and attribute ~= "" then
+			return attribute
+		end
+	end
+	return c.Name
 end
 
 local function newline(color)
@@ -158,12 +196,9 @@ local function getItemInfo(c)
 		if ok and pp then part = pp end
 	end
 	if not part then return nil end
-	local typeName = canonicalTypeName(c.Name)
+	local typeName = inferItemName(c, oc)
 	if tval and tval.ClassName == "StringValue" and tval.Value ~= "" then
-		local valueName = canonicalTypeName(tval.Value)
-		if valueName ~= "" and valueName ~= "mission item" then
-			typeName = valueName
-		end
+		typeName = tval.Value
 	end
 	if typeName == "" or typeName == "mission item" then typeName = "unknown" end
 	local ok, addr = pcall(function() return c.Address end)
@@ -465,5 +500,4 @@ task.spawn(function()
 end)
 
 pcall(function() notify("reignfall.lua", "enabled: ammo + stamina + item esp", 3) end)
-
 
