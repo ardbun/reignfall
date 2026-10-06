@@ -3,7 +3,7 @@
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.distance/.spin/.spin_speed/.size
 
-local SCRIPT_VERSION = 10
+local SCRIPT_VERSION = 11
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
 	and tick() - _G.__reignfall_heartbeat < 2
 	and _G.__reignfall_version == SCRIPT_VERSION then
@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 local ws = game.Workspace
 local lp = Players.LocalPlayer
 
-local SEGMENTS = 64
+local SEGMENTS = 16
 local MAX_TRACK = 10
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
@@ -79,7 +79,7 @@ end
 local function newline(color)
 	local d = Drawing.new("Line")
 	d.Color = color
-	d.Transparency = 1
+	d.Transparency = 0
 	d.Visible = false
 	d.From = Vector2.new(0, 0)
 	d.To = Vector2.new(0, 0)
@@ -465,3 +465,5 @@ task.spawn(function()
 end)
 
 pcall(function() notify("reignfall.lua", "enabled: ammo + stamina + item esp", 3) end)
+
+
