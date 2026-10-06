@@ -1,7 +1,7 @@
 -- reignfall.lua
--- features: infinite ammo | infinite stamina (hybrid) | mission item esp | +17% speed
+-- features: infinite ammo | infinite stamina (hybrid) | mission item esp
 -- usage: execute once to enable, execute again to disable and clean up
--- runtime switches: _G.reignfall.ammo/.stamina/.esp/.speed/.distance/.spin/.spin_speed/.size
+-- runtime switches: _G.reignfall.ammo/.stamina/.esp/.distance/.spin/.spin_speed/.size
 
 local SCRIPT_VERSION = 10
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
@@ -17,7 +17,7 @@ local RunService = game:GetService("RunService")
 local ws = game.Workspace
 local lp = Players.LocalPlayer
 
-local SEGMENTS = 16
+local SEGMENTS = 64
 local MAX_TRACK = 10
 local STAMINA_FORCED_MAX = 9999
 local STAMINA_FALLBACK = 100
@@ -56,6 +56,10 @@ local function canonicalTypeName(typeName)
 	if type(typeName) ~= "string" then return "" end
 	local normalized = typeName:lower():gsub("_", " "):gsub("%s+", " ")
 	normalized = normalized:gsub("^%s+", ""):gsub("%s+$", "")
+	normalized = normalized:gsub("^mission item%s+", "")
+	if normalized:find("fuel", 1, true) or normalized:find("gas", 1, true) then
+		return "fuel"
+	end
 	if normalized == "c4" or normalized == "c-4" or normalized == "c 4" then
 		return "c4"
 	end
@@ -66,13 +70,16 @@ local function canonicalTypeName(typeName)
 end
 
 local function displayName(typeName)
-	return SPECIAL_NAMES[canonicalTypeName(typeName)] or "item"
+	local canonical = canonicalTypeName(typeName)
+	local special = SPECIAL_NAMES[canonical]
+	if special then return special end
+	return canonical ~= "" and canonical or "unknown"
 end
 
 local function newline(color)
 	local d = Drawing.new("Line")
 	d.Color = color
-	d.Transparency = 0.1
+	d.Transparency = 1
 	d.Visible = false
 	d.From = Vector2.new(0, 0)
 	d.To = Vector2.new(0, 0)
@@ -151,9 +158,14 @@ local function getItemInfo(c)
 		if ok and pp then part = pp end
 	end
 	if not part then return nil end
-	local typeName = c.Name
-	if tval and tval.ClassName == "StringValue" and tval.Value ~= "" then typeName = tval.Value end
-	typeName = canonicalTypeName(typeName)
+	local typeName = canonicalTypeName(c.Name)
+	if tval and tval.ClassName == "StringValue" and tval.Value ~= "" then
+		local valueName = canonicalTypeName(tval.Value)
+		if valueName ~= "" and valueName ~= "mission item" then
+			typeName = valueName
+		end
+	end
+	if typeName == "" or typeName == "mission item" then typeName = "unknown" end
 	local ok, addr = pcall(function() return c.Address end)
 	if not ok or type(addr) ~= "number" then return nil end
 	return part, typeName, addr
@@ -275,7 +287,7 @@ conn = RunService.RenderStepped:Connect(function()
 				local meters = math.sqrt(dx * dx + dy * dy + dz * dz) * STUD2M
 				makeDrawings(rec)
 				rec.hidden = false
-				if rec.ring then
+				if rec.ring and meters <= 20 then
 					local y = world.Y - rec.yoffset
 					local radius = rec.radius * sizeMult
 					local ring = rec.ring
@@ -297,6 +309,11 @@ conn = RunService.RenderStepped:Connect(function()
 							end
 						end
 						prev, prevOn = cur, curOn
+					end
+				elseif rec.ring then
+					for s = 1, SEGMENTS do
+						local line = rec.ring[s]
+						if line then line.Visible = false end
 					end
 				end
 				local screen, on = WorldToScreen(world)
