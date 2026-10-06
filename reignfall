@@ -195,7 +195,7 @@ task.spawn(function()
 				rec.part = part
 			end
 			rec.name = displayName(typeName)
-			rec.ringEnabled = typeName:lower():find("fissul", 1, true) == nil and typeName:lower() ~= "marked spot"
+			rec.ringEnabled = false
 			if not rec.ringEnabled and rec.ring then
 				for i = 1, SEGMENTS do removeDrawing(rec.ring[i]) end
 				rec.ring = nil
@@ -448,8 +448,3 @@ task.spawn(function()
 end)
 
 pcall(function() notify("reignfall.lua", "enabled: ammo + stamina + item esp", 3) end)
-
-
-
-
-
