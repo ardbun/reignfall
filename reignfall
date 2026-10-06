@@ -195,7 +195,7 @@ task.spawn(function()
 				rec.part = part
 			end
 			rec.name = displayName(typeName)
-			rec.ringEnabled = false
+			rec.ringEnabled = typeName:lower():find("fissul", 1, true) == nil and typeName:lower() ~= "marked spot"
 			if not rec.ringEnabled and rec.ring then
 				for i = 1, SEGMENTS do removeDrawing(rec.ring[i]) end
 				rec.ring = nil
