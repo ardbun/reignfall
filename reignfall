@@ -3,7 +3,7 @@
 -- usage: execute once to enable, execute again to disable and clean up
 -- runtime switches: _G.reignfall.ammo/.stamina/.esp/.distance/.spin/.spin_speed/.size
 
-local SCRIPT_VERSION = 12
+local SCRIPT_VERSION = 13
 if _G.__reignfall_alive and _G.__reignfall_heartbeat
 	and tick() - _G.__reignfall_heartbeat < 2
 	and _G.__reignfall_version == SCRIPT_VERSION then
@@ -397,20 +397,54 @@ local function getStaminaState(char)
 	return stamina, stats
 end
 
-local staminaConn
-staminaConn = RunService.Heartbeat:Connect(function()
-	if not _G.enabled or not _G.reignfall.stamina then return end
-	local stamina = getStaminaState(lp.Character)
+local function enforceStamina()
+	if not _G.enabled or not _G.reignfall or not _G.reignfall.stamina then return end
+	local char = lp.Character
+	if not char then return end
+	local stamina, stats = getStaminaState(char)
 	if stamina then
 		local maxValue = stamina:FindFirstChild("Max")
+		if maxValue then
+			pcall(function() maxValue.Value = STAMINA_FORCED_MAX end)
+		end
 		pcall(function()
-			if maxValue and maxValue.Value ~= STAMINA_FORCED_MAX then
-				maxValue.Value = STAMINA_FORCED_MAX
-			end
 			if stamina.Value < STAMINA_FORCED_MAX then
 				stamina.Value = STAMINA_FORCED_MAX
 			end
 		end)
+	end
+	if stats then
+		local unlimited = stats:FindFirstChild("unlimited_stamina")
+			or findDescendant(stats, "unlimited_stamina")
+		if unlimited then
+			pcall(function() unlimited.Value = true end)
+			local default = unlimited:FindFirstChild("Default")
+			if default then pcall(function() default.Value = true end) end
+		end
+		local cost = stats:FindFirstChild("stamina_cost")
+			or findDescendant(stats, "stamina_cost")
+		if cost then pcall(function() cost.Value = 0 end) end
+	end
+end
+
+local staminaConn
+staminaConn = RunService.Heartbeat:Connect(function()
+	if not _G.enabled then return end
+	local ok, err = pcall(enforceStamina)
+	if not ok then
+		pcall(function() notify("reignfall.lua", "stamina refresh error: " .. tostring(err), 2) end)
+	end
+end)
+
+task.spawn(function()
+	while _G.enabled do
+		if _G.reignfall and _G.reignfall.stamina then
+			local ok, err = pcall(enforceStamina)
+			if not ok then
+				pcall(function() notify("reignfall.lua", "stamina refresh error: " .. tostring(err), 2) end)
+			end
+		end
+		task.wait(0.05)
 	end
 end)
 
@@ -434,33 +468,9 @@ task.spawn(function()
 		if cfg.stamina then
 			local char = lp.Character
 			if char then
-				local st, cs = getStaminaState(char)
-				if st then
-					local mx = st:FindFirstChild("Max")
-					pcall(function()
-						if mx and mx.Value ~= STAMINA_FORCED_MAX then
-							mx.Value = STAMINA_FORCED_MAX
-						end
-						if st.Value < STAMINA_FORCED_MAX then
-							st.Value = STAMINA_FORCED_MAX
-						end
-					end)
-				end
-				local u = cs and (cs:FindFirstChild("unlimited_stamina")
-					or findDescendant(cs, "unlimited_stamina"))
-				if u then
-					pcall(function()
-						if u.Value ~= true then u.Value = true end
-						local d = u:FindFirstChild("Default")
-						if d and d.Value ~= true then d.Value = true end
-					end)
-				end
-				local cost = cs and (cs:FindFirstChild("stamina_cost")
-					or findDescendant(cs, "stamina_cost"))
-				if cost then
-					pcall(function()
-						if cost.Value ~= 0 then cost.Value = 0 end
-					end)
+				local ok, err = pcall(enforceStamina)
+				if not ok then
+					pcall(function() notify("reignfall.lua", "stamina refresh error: " .. tostring(err), 2) end)
 				end
 			end
 		end
@@ -500,4 +510,3 @@ task.spawn(function()
 end)
 
 pcall(function() notify("reignfall.lua", "enabled: ammo + stamina + item esp", 3) end)
-
